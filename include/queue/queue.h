@@ -14,12 +14,15 @@ namespace queue
 {
     enum { CacheLineSize = std::hardware_destructive_interference_size, };
 
-    template < typename T, size_t Alignment > class cell
+    template < typename T > class cell
     {
     public:
-        alignas(Alignment) T value;
-    private:
-        char padding[Alignment - sizeof(value)];
+        cell()
+            : state(0)
+        {}
+
+        T value;
+        std::atomic< unsigned > state;
     };
 
     template < typename T, size_t Size > class static_storage
@@ -27,9 +30,31 @@ namespace queue
         static_assert((Size & Size - 1) == 0);
 
     public:
-        using value_type = cell< T, CacheLineSize >;
+        using value_type = cell< T >;
 
         static_storage(size_t = 0) {}
+
+        constexpr size_t size() const { return Size; }
+        value_type& operator [](size_t i) { return data_[i]; }
+
+    private:
+        std::array< value_type, Size > data_;
+    };
+
+    template < typename T > class cell2
+    {
+    public:
+        T value;
+    };
+
+    template < typename T, size_t Size > class static_storage2
+    {
+        static_assert((Size& Size - 1) == 0);
+
+    public:
+        using value_type = cell2< T >;
+
+        static_storage2(size_t = 0) {}
 
         constexpr size_t size() const { return Size; }
         value_type& operator [](size_t i) { return data_[i]; }
@@ -41,7 +66,7 @@ namespace queue
     template < typename T > class dynamic_storage
     {
     public:
-        using value_type = cell< T, CacheLineSize >;
+        using value_type = cell< T >;
 
         dynamic_storage(size_t size)
             : size_(size)
@@ -60,134 +85,257 @@ namespace queue
         size_t size_;
     };
 
-    template < typename T, typename Storage > class bounded_queue_mpsc
+    template < typename T, typename Storage > class bounded_queue_mpsc2
     {
     public:
         using value_type = T;
         using storage_type = Storage;
 
-        bounded_queue_mpsc(storage_type& storage)
+        bounded_queue_mpsc2(storage_type& storage)
             : storage_(storage)
-            , consumer_begin_(0)
-            , consumer_end_(0)
-            , producer_end_(0)
+            , storage_mask_(storage.size() - 1)
+            , head_(0)
+            , tail_(0)
         {}
 
         template < typename Ty > void push(Ty&& value)
         {
-            size_t index = producer_end_.fetch_add(1, std::memory_order_relaxed) & (storage_.size() - 1);
+            size_t index = tail_.fetch_add(1, std::memory_order_relaxed) & storage_mask_;
 
-            while (consumer_begin_ <= index && index < consumer_end_)
+            while (storage_[index].state.load(std::memory_order_acquire) != 0)
             {
                 // wait till consumers consume storage_[index] and it is free to be written
             }
 
             storage_[index].value = std::forward< Ty >(value);
-
-            while (consumer_end_ != index)
-            {
-                // wait till other producers advertise their pushes before advertising this one
-            }
-
-            consumer_end_ = (index + 1) & (storage_.size() - 1);
-
-            std::atomic_thread_fence(std::memory_order_release);
+            storage_[index].state.store(1, std::memory_order_release);
         }
 
         value_type pop()
         {
-            while (consumer_begin_ == consumer_end_)
+            while (storage_[head_].state.load(std::memory_order_acquire) == 0)
             {
                 // wait till there is something to consume
             }
 
-            std::atomic_thread_fence(std::memory_order_acquire);
+            T value = std::move(storage_[head_].value);
+            storage_[head_].state.store(0, std::memory_order_release);
+            head_ = head_ + 1 & storage_mask_;
+            return value;
+        }
 
-            T value = std::move(storage_[consumer_begin_].value);
-            consumer_begin_ = (consumer_begin_ + 1) & (storage_.size() - 1);
+        template< size_t N > size_t pop(std::array< T, N >& values)
+        {
+            while (storage_[head_].state.load(std::memory_order_acquire) == 0)
+            {
+                // wait till there is something to consume
+            }
+
+            size_t i = 0;
+            while (i < N)
+            {
+                auto& data = storage_[head_ + i & storage_mask_];
+                if (data.state.load(std::memory_order_relaxed) != 0)
+                {
+                    values[i] = std::move(data.value);
+                    data.state.store(0, std::memory_order_relaxed);
+                    i++;
+                }
+                else
+                {
+                    break;
+                }
+            } 
+
+            head_ = head_ + i & storage_mask_;
+            std::atomic_thread_fence(std::memory_order_release);
+            return i;
+        }
+
+        bool empty() const
+        {
+            return head_ == tail_.load(std::memory_order_relaxed);
+        }
+
+        // TODO:
+        // void clear()
+        // This requires resetting the cells' states
+
+    private:
+        alignas(CacheLineSize) storage_type& storage_;
+        const size_t storage_mask_;
+
+        // written by producer
+        alignas(CacheLineSize) std::atomic< size_t > tail_;
+        
+        // written by consumer
+        alignas(CacheLineSize) size_t head_;
+    };
+
+    template < typename T, typename Storage > class bounded_queue_spsc2
+    {
+    public:
+        using value_type = T;
+        using storage_type = Storage;
+
+        bounded_queue_spsc2(storage_type& storage)
+            : storage_(storage)
+            , storage_mask_(storage.size() - 1)
+            , head_(0)
+            , tail_(0)
+        {}
+
+        template < typename Ty > void push(Ty&& value)
+        {
+            size_t index = tail_++ & storage_mask_;
+
+            while (storage_[index].state.load(std::memory_order_acquire) != 0)
+            {
+                // wait till consumers consume storage_[index] and it is free to be written
+            }
+
+            storage_[index].value = std::forward< Ty >(value);
+            storage_[index].state.store(1, std::memory_order_release);
+        }
+
+        value_type pop()
+        {
+            while (storage_[head_].state.load(std::memory_order_acquire) == 0)
+            {
+                // wait till there is something to consume
+            }
+
+            T value = std::move(storage_[head_].value);
+            storage_[head_].state.store(0, std::memory_order_release);
+            head_ = head_ + 1 & storage_mask_;
             return value;
         }
 
         bool empty() const
         {
-            return consumer_begin_ == consumer_end_;
+            return head_ == tail_;
         }
 
         void clear()
         {
-            consumer_begin_ = consumer_end_ = producer_end_ = 0;
+            head_ = tail_ = 0;
         }
 
     private:
         alignas(CacheLineSize) storage_type& storage_;
+        const size_t storage_mask_;
 
         // written by producer
-        alignas(CacheLineSize) size_t consumer_end_;
-        std::atomic< size_t > producer_end_;
+        alignas(CacheLineSize) size_t head_;
 
         // written by consumer
-        alignas(CacheLineSize) size_t consumer_begin_;
+        alignas(CacheLineSize) size_t tail_;
     };
 
-    template < typename T, typename Storage > class bounded_queue_spsc
+    template < typename T, typename Storage > class bounded_queue_spsc3
     {
-        enum { CacheLineSize = std::hardware_destructive_interference_size, };
+        // Correct and Efficient Bounded FIFO Queues
+        // https://www.irif.fr/~guatto/papers/sbac13.pdf
 
     public:
         using value_type = T;
         using storage_type = Storage;
 
-        bounded_queue_spsc(storage_type& storage)
+        bounded_queue_spsc3(storage_type& storage)
             : storage_(storage)
-            , consumer_begin_(0)
-            , consumer_end_(0)
-            , producer_end_(0)
+            , storage_mask_(storage.size() - 1)
+            , head_(0)
+            , head_local_(0)
+            , tail_(0)
+            , tail_local_(0)
         {}
 
         template < typename Ty > void push(Ty&& value)
         {
-            size_t index = producer_end_++ & (storage_.size() - 1);
-
-            while (consumer_begin_ <= index && index < consumer_end_)
-            { 
-                // wait till consumers consume storage_[index] and it is free to be written
-            }
-
-            storage_[index].value = std::forward< Ty >(value);
-
-            while (consumer_end_ != index)
+            intptr_t tail = tail_.load(std::memory_order_relaxed);
+            if (head_local_ + storage_.size() - tail < 1)
             {
-                // wait till other producers advertise their pushes before advertising this one
+                while (true)
+                {
+                    head_local_ = head_.load(std::memory_order_acquire);
+                    if (head_local_ + storage_.size() - tail >= 1)
+                    {
+                        break;
+                    }
+                }
             }
 
-            consumer_end_ = index + 1 & (storage_.size() - 1);
-            std::atomic_thread_fence(std::memory_order_release);
+            storage_[tail & storage_mask_].value = std::forward< Ty >(value);
+            tail_.store(tail + 1, std::memory_order_release);
         }
 
-        value_type pop()
+        T pop()
         {
-            while (consumer_begin_ == consumer_end_)
+            intptr_t head = head_.load(std::memory_order_relaxed);
+            if (tail_local_ - head < 1)
             {
-                // wait till there is something to consume
+                while (true)
+                {
+                    tail_local_ = tail_.load(std::memory_order_acquire);
+                    if (tail_local_ - head >= 1)
+                    {
+                        break;
+                    }
+                }
             }
 
-            std::atomic_thread_fence(std::memory_order_acquire);
-
-            T value = std::move(storage_[consumer_begin_].value);
-            consumer_begin_ = (consumer_begin_ + 1) & (storage_.size() - 1);            
+            T value = std::move(storage_[head & storage_mask_].value);
+            head_.store(head + 1, std::memory_order_release);
             return value;
         }
 
-        bool empty() const { return consumer_begin_ == consumer_end_; }
+        template < size_t N > size_t pop(std::array< T, N >& values)
+        {
+            intptr_t head = head_.load(std::memory_order_relaxed);
+            if (tail_local_ - head < 1)
+            {
+                while (true)
+                {
+                    tail_local_ = tail_.load(std::memory_order_acquire);
+                    if (tail_local_ - head >= 1)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            size_t n = std::min(N, size_t(tail_local_ - head));
+            for (size_t i = 0; i < n; ++i)
+            {
+                values[i] = std::move(storage_[head + i & storage_mask_].value);
+            }
+
+            head_.store(head + n, std::memory_order_release);
+            return n;
+        }
+
+        bool empty() const
+        {
+            // TODO: could this use producer/consumer local variables?
+            return head_local_ == tail_local_;
+        }
+
+        void clear()
+        {
+            head_ = tail_ = 0;
+            head_local_ = tail_local_ = 0;
+        }
 
     private:
         alignas(CacheLineSize) storage_type& storage_;
-        
+        const size_t storage_mask_;
+
         // written by producer
-        alignas(CacheLineSize) size_t consumer_end_;
-        size_t producer_end_;
+        alignas(CacheLineSize) std::atomic< intptr_t > tail_;
+        intptr_t tail_local_;
 
         // written by consumer
-        alignas(CacheLineSize) size_t consumer_begin_;
+        alignas(CacheLineSize) std::atomic< intptr_t > head_;
+        intptr_t head_local_;
     };
 }
