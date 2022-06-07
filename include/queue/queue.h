@@ -74,7 +74,7 @@ namespace queue
             if((size & size - 1) != 0)
                 std::abort();
 
-            data_.reset(new cell< T, CacheLineSize >[size]);
+            data_.reset(new cell< T >[size]);
         }
 
         size_t size() const { return size_; }
@@ -83,6 +83,61 @@ namespace queue
     private:
         std::unique_ptr< value_type[] > data_;
         size_t size_;
+    };
+
+    template < typename T > class dynamic_storage2
+    {
+    public:
+        using value_type = cell2< T >;
+
+        dynamic_storage2(size_t size)
+            : size_(size)
+        {
+            if ((size & size - 1) != 0)
+                std::abort();
+
+            data_.reset(new value_type[size]);
+        }
+
+        size_t size() const { return size_; }
+        value_type& operator [](size_t i) { return data_[i]; }
+
+    private:
+        std::unique_ptr< value_type[] > data_;
+        size_t size_;
+    };
+
+    template < typename T, typename Storage > class bounded_queue
+    {
+    public:
+        using value_type = T;
+        using storage_type = Storage;
+
+        bounded_queue(storage_type& storage)
+            : storage_(storage)
+            , storage_mask_(storage.size() - 1)
+            , head_(0)
+            , tail_(0)
+        {}
+
+        template < typename Ty > void push(Ty&& value)
+        {
+            size_t index = tail_++ & storage_mask_;            
+            storage_[index].value = std::forward< Ty >(value);
+        }
+
+        value_type pop()
+        {
+            T value = std::move(storage_[head_].value);
+            head_ = head_ + 1 & storage_mask_;
+            return value;
+        }
+
+    private:
+        storage_type& storage_;
+        const size_t storage_mask_;
+        size_t head_;
+        size_t tail_;
     };
 
     template < typename T, typename Storage > class bounded_queue_mpsc2
@@ -209,6 +264,33 @@ namespace queue
             storage_[head_].state.store(0, std::memory_order_release);
             head_ = head_ + 1 & storage_mask_;
             return value;
+        }
+
+        template < size_t N > size_t pop(std::array< T, N >& values)
+        {
+            while (storage_[head_].state.load(std::memory_order_acquire) == 0)
+            {
+                // wait till there is something to consume
+            }
+
+            size_t i = 0;
+            while (i < N)
+            {
+                auto& data = storage_[head_ + i & storage_mask_];
+                if (data.state.load(std::memory_order_relaxed) != 0)
+                {
+                    values[i] = std::move(data.value);
+                    data.state.store(0, std::memory_order_relaxed);
+                    i++;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            head_ = head_ + i & storage_mask_;
+            return i;
         }
 
         bool empty() const
