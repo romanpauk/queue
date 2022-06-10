@@ -72,7 +72,7 @@ template < typename T > static void queue_push_pop_parallel_batch(benchmark::Sta
         std::array< T::value_type, 1024 > values;
         while (true)
         {            
-            queue.pop(values);
+            queue.pop<true>(values);
         }            
     });
 
@@ -152,7 +152,7 @@ BENCHMARK_TEMPLATE(queue_push, queue::bounded_queue_mpsc2< int, queue::dynamic_s
 BENCHMARK_TEMPLATE(queue_push_pop_parallel, queue::bounded_queue_spsc2< int, queue::static_storage< int, 1024 > >)->UseRealTime()->Threads(1)->Range(range_min, range_max);
 //BENCHMARK_TEMPLATE(queue_push_pop_parallel_batch, queue::bounded_queue_spsc2< int, queue::static_storage< int, 1024 > >)->UseRealTime()->Threads(1)->Range(range_min, range_max);
 BENCHMARK_TEMPLATE(queue_push_pop_parallel, queue::bounded_queue_spsc3< int, queue::static_storage2< int, 1024 > >)->UseRealTime()->Threads(1)->Range(range_min, range_max);
-//BENCHMARK_TEMPLATE(queue_push_pop_parallel_batch, queue::bounded_queue_spsc3< int, queue::static_storage2< int, 1024 > >)->UseRealTime()->Threads(1)->Range(range_min, range_max);
+BENCHMARK_TEMPLATE(queue_push_pop_parallel_batch, queue::bounded_queue_spsc3< int, queue::static_storage2< int, 1024 > >)->UseRealTime()->Threads(1)->Range(range_min, range_max);
 
 BENCHMARK_TEMPLATE(queue_push_pop_parallel, queue::bounded_queue_mpsc2< int, queue::static_storage< int, 1024 > >)->UseRealTime()->ThreadRange(1, threads_max)->Range(range_min, range_max);
 //BENCHMARK_TEMPLATE(queue_push_pop_parallel_batch, queue::bounded_queue_mpsc2< int, queue::static_storage< int, 1024 > >)->UseRealTime()->ThreadRange(1, threads_max)->Range(range_min, range_max);

@@ -179,11 +179,12 @@ namespace queue
             return value;
         }
 
-        template< size_t N > size_t pop(std::array< T, N >& values)
+        template< bool Blocking, size_t N > size_t pop(std::array< T, N >& values)
         {
             while (storage_[head_].state.load(std::memory_order_acquire) == 0)
             {
-                // wait till there is something to consume
+                if(!Blocking)
+                    return 0;
             }
 
             size_t i = 0;
@@ -266,11 +267,12 @@ namespace queue
             return value;
         }
 
-        template < size_t N > size_t pop(std::array< T, N >& values)
+        template < bool Blocking, size_t N > size_t pop(std::array< T, N >& values)
         {
             while (storage_[head_].state.load(std::memory_order_acquire) == 0)
             {
-                // wait till there is something to consume
+                if(!Blocking)
+                    return 0;
             }
 
             size_t i = 0;
@@ -371,7 +373,7 @@ namespace queue
             return value;
         }
 
-        template < size_t N > size_t pop(std::array< T, N >& values)
+        template < bool Blocking, size_t N > size_t pop(std::array< T, N >& values)
         {
             intptr_t head = head_.load(std::memory_order_relaxed);
             if (tail_local_ - head < 1)
@@ -383,6 +385,9 @@ namespace queue
                     {
                         break;
                     }
+
+                    if(!Blocking)
+                        return 0;
                 }
             }
 
