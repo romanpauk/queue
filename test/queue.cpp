@@ -10,9 +10,8 @@
 #include <gtest/gtest.h>
 
 TEST(queue_test, static_basic)
-{
-    queue::static_storage< int, 1024 > storage;
-    queue::bounded_queue_mpsc< int, queue::static_storage< int, 1024 > > q(storage);
+{    
+    queue::bounded_queue_mpsc2< int, queue::static_storage< int, 1024 > > q;
 
     EXPECT_TRUE(q.empty());
     q.push(1);
@@ -23,9 +22,8 @@ TEST(queue_test, static_basic)
 }
 
 TEST(queue_test, dynamic_basic)
-{
-    queue::dynamic_storage< int > storage(1 << 20);
-    queue::bounded_queue_mpsc< int, queue::dynamic_storage< int > > q(storage);
+{    
+    queue::bounded_queue_mpsc2< int, queue::dynamic_storage< int > > q(1 << 20);
 
     EXPECT_TRUE(q.empty());
     q.push(1);
