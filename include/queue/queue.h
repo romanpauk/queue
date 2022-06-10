@@ -35,6 +35,8 @@ namespace queue
         static_storage(size_t = 0) {}
 
         constexpr size_t size() const { return Size; }
+        constexpr size_t mask() const { return Size - 1; }
+
         value_type& operator [](size_t i) { return data_[i]; }
 
     private:
@@ -57,6 +59,8 @@ namespace queue
         static_storage2(size_t = 0) {}
 
         constexpr size_t size() const { return Size; }
+        constexpr size_t mask() const { return Size - 1; }
+
         value_type& operator [](size_t i) { return data_[i]; }
 
     private:
@@ -70,6 +74,7 @@ namespace queue
 
         dynamic_storage(size_t size)
             : size_(size)
+            , mask_(size - 1)
         {
             if((size & size - 1) != 0)
                 std::abort();
@@ -78,11 +83,14 @@ namespace queue
         }
 
         size_t size() const { return size_; }
+        size_t mask() const { return mask_; }
+
         value_type& operator [](size_t i) { return data_[i]; }
 
     private:
         std::unique_ptr< value_type[] > data_;
         size_t size_;
+        size_t mask_;
     };
 
     template < typename T > class dynamic_storage2
@@ -92,6 +100,7 @@ namespace queue
 
         dynamic_storage2(size_t size)
             : size_(size)
+            , mask_(size - 1)
         {
             if ((size & size - 1) != 0)
                 std::abort();
@@ -100,11 +109,14 @@ namespace queue
         }
 
         size_t size() const { return size_; }
+        size_t mask() const { return mask_; }
+
         value_type& operator [](size_t i) { return data_[i]; }
 
     private:
         std::unique_ptr< value_type[] > data_;
         size_t size_;
+        size_t mask_;
     };
 
     template < typename T, typename Storage > class bounded_queue
@@ -115,27 +127,26 @@ namespace queue
 
         bounded_queue(storage_type& storage)
             : storage_(storage)
-            , storage_mask_(storage.size() - 1)
             , head_(0)
             , tail_(0)
         {}
 
         template < typename Ty > void push(Ty&& value)
         {
-            size_t index = tail_++ & storage_mask_;            
+            size_t index = tail_++ & storage_.mask();
             storage_[index].value = std::forward< Ty >(value);
         }
 
         value_type pop()
         {
             T value = std::move(storage_[head_].value);
-            head_ = head_ + 1 & storage_mask_;
+            head_ = head_ + 1 & storage_.mask();
             return value;
         }
 
     private:
         storage_type& storage_;
-        const size_t storage_mask_;
+        
         size_t head_;
         size_t tail_;
     };
@@ -148,14 +159,13 @@ namespace queue
 
         bounded_queue_mpsc2(storage_type& storage)
             : storage_(storage)
-            , storage_mask_(storage.size() - 1)
             , head_(0)
             , tail_(0)
         {}
 
         template < typename Ty > void push(Ty&& value)
         {
-            size_t index = tail_.fetch_add(1, std::memory_order_relaxed) & storage_mask_;
+            size_t index = tail_.fetch_add(1, std::memory_order_relaxed) & storage_.mask();
 
             while (storage_[index].state.load(std::memory_order_acquire) != 0)
             {
@@ -175,7 +185,7 @@ namespace queue
 
             T value = std::move(storage_[head_].value);
             storage_[head_].state.store(0, std::memory_order_release);
-            head_ = head_ + 1 & storage_mask_;
+            head_ = head_ + 1 & storage_.mask();
             return value;
         }
 
@@ -190,7 +200,7 @@ namespace queue
             size_t i = 0;
             while (i < N)
             {
-                auto& data = storage_[head_ + i & storage_mask_];
+                auto& data = storage_[head_ + i & storage_.mask()];
                 if (data.state.load(std::memory_order_relaxed) != 0)
                 {
                     values[i] = std::move(data.value);
@@ -203,7 +213,7 @@ namespace queue
                 }
             } 
 
-            head_ = head_ + i & storage_mask_;
+            head_ = head_ + i & storage_.mask();
             std::atomic_thread_fence(std::memory_order_release);
             return i;
         }
@@ -219,8 +229,7 @@ namespace queue
 
     private:
         alignas(CacheLineSize) storage_type& storage_;
-        const size_t storage_mask_;
-
+        
         // written by producer
         alignas(CacheLineSize) std::atomic< size_t > tail_;
         
@@ -236,14 +245,13 @@ namespace queue
 
         bounded_queue_spsc2(storage_type& storage)
             : storage_(storage)
-            , storage_mask_(storage.size() - 1)
             , head_(0)
             , tail_(0)
         {}
 
         template < typename Ty > void push(Ty&& value)
         {
-            size_t index = tail_++ & storage_mask_;
+            size_t index = tail_++ & storage_.mask();
 
             while (storage_[index].state.load(std::memory_order_acquire) != 0)
             {
@@ -263,7 +271,7 @@ namespace queue
 
             T value = std::move(storage_[head_].value);
             storage_[head_].state.store(0, std::memory_order_release);
-            head_ = head_ + 1 & storage_mask_;
+            head_ = head_ + 1 & storage_.mask();
             return value;
         }
 
@@ -278,7 +286,7 @@ namespace queue
             size_t i = 0;
             while (i < N)
             {
-                auto& data = storage_[head_ + i & storage_mask_];
+                auto& data = storage_[head_ + i & storage_.mask()];
                 if (data.state.load(std::memory_order_relaxed) != 0)
                 {
                     values[i] = std::move(data.value);
@@ -291,7 +299,7 @@ namespace queue
                 }
             }
 
-            head_ = head_ + i & storage_mask_;
+            head_ = head_ + i & storage_.mask();
             return i;
         }
 
@@ -307,8 +315,7 @@ namespace queue
 
     private:
         alignas(CacheLineSize) storage_type& storage_;
-        const size_t storage_mask_;
-
+        
         // written by producer
         alignas(CacheLineSize) size_t head_;
 
@@ -327,7 +334,6 @@ namespace queue
 
         bounded_queue_spsc3(storage_type& storage)
             : storage_(storage)
-            , storage_mask_(storage.size() - 1)
             , head_(0)
             , head_local_(0)
             , tail_(0)
@@ -349,7 +355,7 @@ namespace queue
                 }
             }
 
-            storage_[tail & storage_mask_].value = std::forward< Ty >(value);
+            storage_[tail & storage_.mask()].value = std::forward< Ty >(value);
             tail_.store(tail + 1, std::memory_order_release);
         }
 
@@ -368,7 +374,7 @@ namespace queue
                 }
             }
 
-            T value = std::move(storage_[head & storage_mask_].value);
+            T value = std::move(storage_[head & storage_.mask()].value);
             head_.store(head + 1, std::memory_order_release);
             return value;
         }
@@ -394,7 +400,7 @@ namespace queue
             size_t n = std::min(N, size_t(tail_local_ - head));
             for (size_t i = 0; i < n; ++i)
             {
-                values[i] = std::move(storage_[head + i & storage_mask_].value);
+                values[i] = std::move(storage_[head + i & storage_.mask()].value);
             }
 
             head_.store(head + n, std::memory_order_release);
@@ -415,8 +421,7 @@ namespace queue
 
     private:
         alignas(CacheLineSize) storage_type& storage_;
-        const size_t storage_mask_;
-
+        
         // written by producer
         alignas(CacheLineSize) std::atomic< intptr_t > tail_;
         intptr_t tail_local_;
