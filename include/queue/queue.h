@@ -145,10 +145,9 @@ namespace queue
         }
 
     private:
-        storage_type storage_;
-        
-        size_t head_;
         size_t tail_;
+        size_t head_;
+        storage_type storage_;
     };
 
     template < typename T, typename Storage > class bounded_queue_mpsc2
@@ -228,13 +227,9 @@ namespace queue
         // This requires resetting the cells' states
 
     private:
-        alignas(CacheLineSize) storage_type storage_;
-        
-        // written by producer
         alignas(CacheLineSize) std::atomic< size_t > tail_;
-        
-        // written by consumer
         alignas(CacheLineSize) size_t head_;
+        alignas(CacheLineSize) storage_type storage_;
     };
 
     template < typename T, typename Storage > class bounded_queue_spsc2
@@ -314,13 +309,9 @@ namespace queue
         }
 
     private:
-        alignas(CacheLineSize) storage_type storage_;
-        
-        // written by producer
-        alignas(CacheLineSize) size_t head_;
-
-        // written by consumer
         alignas(CacheLineSize) size_t tail_;
+        alignas(CacheLineSize) size_t head_;        
+        alignas(CacheLineSize) storage_type storage_;
     };
 
     template < typename T, typename Storage > class bounded_queue_spsc3
@@ -420,14 +411,10 @@ namespace queue
         }
 
     private:
-        alignas(CacheLineSize) storage_type storage_;
-        
-        // written by producer
         alignas(CacheLineSize) std::atomic< intptr_t > tail_;
         intptr_t tail_local_;
-
-        // written by consumer
         alignas(CacheLineSize) std::atomic< intptr_t > head_;
         intptr_t head_local_;
+        alignas(CacheLineSize) storage_type storage_;
     };
 }
