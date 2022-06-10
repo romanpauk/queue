@@ -13,9 +13,8 @@
 
 const size_t QueuePushIterations = 1 << 20;
 template < typename T > static void queue_push(benchmark::State& state)
-{
-    typename T::storage_type storage(QueuePushIterations << 1);
-    T queue(storage);
+{    
+    T queue(QueuePushIterations << 1);
     
     for (auto _ : state)
     {        
@@ -43,9 +42,8 @@ template < typename T > static void queue_pop(benchmark::State& state)
 }
 
 template < typename T > static void queue_push_pop_parallel(benchmark::State& state)
-{
-    static typename T::storage_type storage(1024);
-    static T queue(storage);
+{    
+    static T queue(1024);
     static auto thread = std::thread([&]
     {
         while(true)
@@ -64,9 +62,8 @@ template < typename T > static void queue_push_pop_parallel(benchmark::State& st
 }
 
 template < typename T > static void queue_push_pop_parallel_batch(benchmark::State& state)
-{
-    static typename T::storage_type storage(1024);
-    static T queue(storage);
+{    
+    static T queue(1024);
     static auto thread = std::thread([&]
     {
         std::array< T::value_type, 1024 > values;
@@ -88,9 +85,8 @@ template < typename T > static void queue_push_pop_parallel_batch(benchmark::Sta
 }
 
 template < typename T > static void queue_push_pop_sequential(benchmark::State& state)
-{
-    typename T::storage_type storage(1024);
-    T queue(storage);
+{    
+    T queue(1024);
 
     for (auto _ : state)
     {

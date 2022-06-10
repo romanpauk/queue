@@ -125,8 +125,8 @@ namespace queue
         using value_type = T;
         using storage_type = Storage;
 
-        bounded_queue(storage_type& storage)
-            : storage_(storage)
+        template < typename... Args > bounded_queue(Args&&... args)
+            : storage_(std::forward< Args >(args)...)
             , head_(0)
             , tail_(0)
         {}
@@ -145,7 +145,7 @@ namespace queue
         }
 
     private:
-        storage_type& storage_;
+        storage_type storage_;
         
         size_t head_;
         size_t tail_;
@@ -157,8 +157,8 @@ namespace queue
         using value_type = T;
         using storage_type = Storage;
 
-        bounded_queue_mpsc2(storage_type& storage)
-            : storage_(storage)
+        template< typename... Args > bounded_queue_mpsc2(Args&&... args)
+            : storage_(std::forward< Args >(args)...)
             , head_(0)
             , tail_(0)
         {}
@@ -228,7 +228,7 @@ namespace queue
         // This requires resetting the cells' states
 
     private:
-        alignas(CacheLineSize) storage_type& storage_;
+        alignas(CacheLineSize) storage_type storage_;
         
         // written by producer
         alignas(CacheLineSize) std::atomic< size_t > tail_;
@@ -243,8 +243,8 @@ namespace queue
         using value_type = T;
         using storage_type = Storage;
 
-        bounded_queue_spsc2(storage_type& storage)
-            : storage_(storage)
+        template< typename... Args > bounded_queue_spsc2(Args&&... args)
+            : storage_(std::forward< Args >(args)...)
             , head_(0)
             , tail_(0)
         {}
@@ -314,7 +314,7 @@ namespace queue
         }
 
     private:
-        alignas(CacheLineSize) storage_type& storage_;
+        alignas(CacheLineSize) storage_type storage_;
         
         // written by producer
         alignas(CacheLineSize) size_t head_;
@@ -332,8 +332,8 @@ namespace queue
         using value_type = T;
         using storage_type = Storage;
 
-        bounded_queue_spsc3(storage_type& storage)
-            : storage_(storage)
+        template< typename... Args > bounded_queue_spsc3(Args&&... args)
+            : storage_(std::forward< Args >(args)...)
             , head_(0)
             , head_local_(0)
             , tail_(0)
@@ -420,7 +420,7 @@ namespace queue
         }
 
     private:
-        alignas(CacheLineSize) storage_type& storage_;
+        alignas(CacheLineSize) storage_type storage_;
         
         // written by producer
         alignas(CacheLineSize) std::atomic< intptr_t > tail_;
