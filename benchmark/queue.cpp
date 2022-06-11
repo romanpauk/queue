@@ -1,4 +1,4 @@
-//
+
 // This file is part of queue project <https://github.com/romanpauk/queue>
 //
 // See LICENSE for license and copyright information
@@ -66,10 +66,10 @@ template < typename T > static void queue_push_pop_parallel_batch(benchmark::Sta
     static T queue(1024);
     static auto thread = std::thread([&]
     {
-        std::array< T::value_type, 1024 > values;
+        std::array< typename T::value_type, 1024 > values;
         while (true)
         {            
-            queue.pop<true>(values);
+            queue.template pop< true >(values);
         }            
     });
 

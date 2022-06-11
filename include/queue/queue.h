@@ -9,6 +9,7 @@
 #include <memory>
 #include <atomic>
 #include <new>
+#include <cstdlib>
 
 namespace queue
 {
