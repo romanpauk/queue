@@ -13,7 +13,11 @@
 
 namespace queue
 {
+#if defined(_WIN32)
     enum { CacheLineSize = std::hardware_destructive_interference_size, };
+#else
+    enum { CacheLineSize = 64, };
+#endif
 
     template < typename T > class cell
     {
