@@ -11,7 +11,7 @@
 
 TEST(queue_test, static_basic)
 {    
-    queue::bounded_queue_mpsc2< int, queue::static_storage< int, 1024 > > q;
+    queue::bounded_queue_mpsc< int, queue::static_storage< queue::entry< int >, 1024 > > q;
 
     EXPECT_TRUE(q.empty());
     q.push(1);
@@ -23,7 +23,7 @@ TEST(queue_test, static_basic)
 
 TEST(queue_test, dynamic_basic)
 {    
-    queue::bounded_queue_mpsc2< int, queue::dynamic_storage< int > > q(1 << 20);
+    queue::bounded_queue_mpsc< int, queue::dynamic_storage< queue::entry< int > > > q(1 << 20);
 
     EXPECT_TRUE(q.empty());
     q.push(1);

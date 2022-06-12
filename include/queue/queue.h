@@ -19,10 +19,10 @@ namespace queue
     enum { CacheLineSize = 64, };
 #endif
 
-    template < typename T > class cell
+    template < typename T > class entry
     {
     public:
-        cell()
+        entry()
             : state(0)
         {}
 
@@ -35,33 +35,9 @@ namespace queue
         static_assert((Size & Size - 1) == 0);
 
     public:
-        using value_type = cell< T >;
+        using value_type = T;
 
         static_storage(size_t = 0) {}
-
-        constexpr size_t size() const { return Size; }
-        constexpr size_t mask() const { return Size - 1; }
-
-        value_type& operator [](size_t i) { return data_[i]; }
-
-    private:
-        std::array< value_type, Size > data_;
-    };
-
-    template < typename T > class cell2
-    {
-    public:
-        T value;
-    };
-
-    template < typename T, size_t Size > class static_storage2
-    {
-        static_assert((Size& Size - 1) == 0);
-
-    public:
-        using value_type = cell2< T >;
-
-        static_storage2(size_t = 0) {}
 
         constexpr size_t size() const { return Size; }
         constexpr size_t mask() const { return Size - 1; }
@@ -75,7 +51,7 @@ namespace queue
     template < typename T > class dynamic_storage
     {
     public:
-        using value_type = cell< T >;
+        using value_type = T;
 
         dynamic_storage(size_t size)
             : size_(size)
@@ -84,33 +60,7 @@ namespace queue
             if((size & size - 1) != 0)
                 std::abort();
 
-            data_.reset(new cell< T >[size]);
-        }
-
-        size_t size() const { return size_; }
-        size_t mask() const { return mask_; }
-
-        value_type& operator [](size_t i) { return data_[i]; }
-
-    private:
-        std::unique_ptr< value_type[] > data_;
-        size_t size_;
-        size_t mask_;
-    };
-
-    template < typename T > class dynamic_storage2
-    {
-    public:
-        using value_type = cell2< T >;
-
-        dynamic_storage2(size_t size)
-            : size_(size)
-            , mask_(size - 1)
-        {
-            if ((size & size - 1) != 0)
-                std::abort();
-
-            data_.reset(new value_type[size]);
+            data_.reset(new T[size]);
         }
 
         size_t size() const { return size_; }
@@ -139,12 +89,12 @@ namespace queue
         template < typename Ty > void push(Ty&& value)
         {
             size_t index = tail_++ & storage_.mask();
-            storage_[index].value = std::forward< Ty >(value);
+            storage_[index] = std::forward< Ty >(value);
         }
 
         value_type pop()
         {
-            T value = std::move(storage_[head_].value);
+            T value = std::move(storage_[head_]);
             head_ = head_ + 1 & storage_.mask();
             return value;
         }
@@ -155,13 +105,13 @@ namespace queue
         storage_type storage_;
     };
 
-    template < typename T, typename Storage > class bounded_queue_mpsc2
+    template < typename T, typename Storage > class bounded_queue_mpsc
     {
     public:
         using value_type = T;
         using storage_type = Storage;
 
-        template< typename... Args > bounded_queue_mpsc2(Args&&... args)
+        template< typename... Args > bounded_queue_mpsc(Args&&... args)
             : storage_(std::forward< Args >(args)...)
             , head_(0)
             , tail_(0)
@@ -237,13 +187,13 @@ namespace queue
         alignas(CacheLineSize) storage_type storage_;
     };
 
-    template < typename T, typename Storage > class bounded_queue_spsc2
+    template < typename T, typename Storage > class bounded_queue_spsc1
     {
     public:
         using value_type = T;
         using storage_type = Storage;
 
-        template< typename... Args > bounded_queue_spsc2(Args&&... args)
+        template< typename... Args > bounded_queue_spsc1(Args&&... args)
             : storage_(std::forward< Args >(args)...)
             , head_(0)
             , tail_(0)
@@ -319,7 +269,7 @@ namespace queue
         alignas(CacheLineSize) storage_type storage_;
     };
 
-    template < typename T, typename Storage > class bounded_queue_spsc3
+    template < typename T, typename Storage > class bounded_queue_spsc2
     {
         // Correct and Efficient Bounded FIFO Queues
         // https://www.irif.fr/~guatto/papers/sbac13.pdf
@@ -328,7 +278,7 @@ namespace queue
         using value_type = T;
         using storage_type = Storage;
 
-        template< typename... Args > bounded_queue_spsc3(Args&&... args)
+        template< typename... Args > bounded_queue_spsc2(Args&&... args)
             : storage_(std::forward< Args >(args)...)
             , head_(0)
             , head_local_(0)
@@ -351,7 +301,7 @@ namespace queue
                 }
             }
 
-            storage_[tail & storage_.mask()].value = std::forward< Ty >(value);
+            storage_[tail & storage_.mask()] = std::forward< Ty >(value);
             tail_.store(tail + 1, std::memory_order_release);
         }
 
@@ -370,7 +320,7 @@ namespace queue
                 }
             }
 
-            T value = std::move(storage_[head & storage_.mask()].value);
+            T value = std::move(storage_[head & storage_.mask()]);
             head_.store(head + 1, std::memory_order_release);
             return value;
         }
@@ -396,7 +346,7 @@ namespace queue
             size_t n = std::min(N, size_t(tail_local_ - head));
             for (size_t i = 0; i < n; ++i)
             {
-                values[i] = std::move(storage_[head + i & storage_.mask()].value);
+                values[i] = std::move(storage_[head + i & storage_.mask()]);
             }
 
             head_.store(head + n, std::memory_order_release);
