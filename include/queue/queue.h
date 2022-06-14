@@ -124,6 +124,7 @@ namespace queue
             while (storage_[index].state.load(std::memory_order_acquire) != 0)
             {
                 // wait till consumers consume storage_[index] and it is free to be written
+                _mm_pause();
             }
 
             storage_[index].value = std::forward< Ty >(value);
@@ -135,6 +136,7 @@ namespace queue
             while (storage_[head_].state.load(std::memory_order_acquire) == 0)
             {
                 // wait till there is something to consume
+                _mm_pause();
             }
 
             T value = std::move(storage_[head_].value);
@@ -149,6 +151,7 @@ namespace queue
             {
                 if(!Blocking)
                     return 0;
+                _mm_pause();
             }
 
             size_t i = 0;
@@ -206,6 +209,7 @@ namespace queue
             while (storage_[index].state.load(std::memory_order_acquire) != 0)
             {
                 // wait till consumers consume storage_[index] and it is free to be written
+                _mm_pause();
             }
 
             storage_[index].value = std::forward< Ty >(value);
@@ -217,6 +221,7 @@ namespace queue
             while (storage_[head_].state.load(std::memory_order_acquire) == 0)
             {
                 // wait till there is something to consume
+                _mm_pause();
             }
 
             T value = std::move(storage_[head_].value);
@@ -231,6 +236,7 @@ namespace queue
             {
                 if(!Blocking)
                     return 0;
+                _mm_pause();
             }
 
             size_t i = 0;
@@ -298,6 +304,7 @@ namespace queue
                     {
                         break;
                     }
+                    _mm_pause();
                 }
             }
 
@@ -317,6 +324,7 @@ namespace queue
                     {
                         break;
                     }
+                    _mm_pause();
                 }
             }
 
@@ -340,6 +348,7 @@ namespace queue
 
                     if(!Blocking)
                         return 0;
+                    _mm_pause();
                 }
             }
 
