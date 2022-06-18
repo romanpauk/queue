@@ -367,9 +367,9 @@ namespace queue
 
     private:
         alignas(CacheLineSize) std::atomic< intptr_t > tail_;
-        intptr_t tail_local_;
-        alignas(CacheLineSize) std::atomic< intptr_t > head_;
         intptr_t head_local_;
+        alignas(CacheLineSize) std::atomic< intptr_t > head_;
+        intptr_t tail_local_;
         alignas(CacheLineSize) storage_type storage_;
     };
 }
