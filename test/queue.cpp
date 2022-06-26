@@ -16,7 +16,8 @@ TEST(queue_test, static_basic)
     EXPECT_TRUE(q.empty());
     q.push(1);
     EXPECT_FALSE(q.empty());
-    auto value = q.pop();
+    int value;
+    EXPECT_TRUE(q.pop(value));
     EXPECT_EQ(value, 1);
     EXPECT_TRUE(q.empty());
 }
@@ -28,7 +29,8 @@ TEST(queue_test, dynamic_basic)
     EXPECT_TRUE(q.empty());
     q.push(1);
     EXPECT_FALSE(q.empty());
-    auto value = q.pop();
+    int value;
+    EXPECT_TRUE(q.pop(value));
     EXPECT_EQ(value, 1);
     EXPECT_TRUE(q.empty());
 }

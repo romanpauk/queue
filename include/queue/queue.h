@@ -86,17 +86,18 @@ namespace queue
             , tail_(0)
         {}
 
-        template < typename Ty > void push(Ty&& value)
+        template < typename Ty > bool push(Ty&& value)
         {
             size_t index = tail_++ & storage_.mask();
             storage_[index] = std::forward< Ty >(value);
+            return true;
         }
 
-        value_type pop()
+        bool pop(value_type& value)
         {
-            T value = std::move(storage_[head_]);
+            value = std::move(storage_[head_]);
             head_ = head_ + 1 & storage_.mask();
-            return value;
+            return true;
         }
 
     private:
@@ -130,25 +131,24 @@ namespace queue
             storage_[index].state.store(1, std::memory_order_release);
         }
 
-        value_type pop()
+        bool pop(value_type& value)
         {
-            while (storage_[head_].state.load(std::memory_order_acquire) == 0)
-            {
-                // wait till there is something to consume
+            if(storage_[head_].state.load(std::memory_order_acquire) == 0)
+            {                
+                return false;
             }
 
-            T value = std::move(storage_[head_].value);
+            value = std::move(storage_[head_].value);
             storage_[head_].state.store(0, std::memory_order_release);
             head_ = head_ + 1 & storage_.mask();
-            return value;
+            return true;
         }
 
-        template< bool Blocking, size_t N > size_t pop(std::array< T, N >& values)
+        template< size_t N > size_t pop(std::array< T, N >& values)
         {
-            while (storage_[head_].state.load(std::memory_order_acquire) == 0)
+            if(storage_[head_].state.load(std::memory_order_acquire) != 0)
             {
-                if(!Blocking)
-                    return 0;
+                return 0;
             }
 
             size_t i = 0;
@@ -199,38 +199,38 @@ namespace queue
             , tail_(0)
         {}
 
-        template < typename Ty > void push(Ty&& value)
+        template < typename Ty > bool push(Ty&& value)
         {
-            size_t index = tail_++ & storage_.mask();
-
-            while (storage_[index].state.load(std::memory_order_acquire) != 0)
+            size_t index = tail_ & storage_.mask();
+            if(storage_[index].state.load(std::memory_order_acquire) != 0)
             {
-                // wait till consumers consume storage_[index] and it is free to be written
+                return false;
             }
 
             storage_[index].value = std::forward< Ty >(value);
             storage_[index].state.store(1, std::memory_order_release);
+            ++tail_;
+            return true;
         }
 
-        value_type pop()
+        bool pop(value_type& value)
         {
-            while (storage_[head_].state.load(std::memory_order_acquire) == 0)
+            if(storage_[head_].state.load(std::memory_order_acquire) == 0)
             {
-                // wait till there is something to consume
+                return false;
             }
 
-            T value = std::move(storage_[head_].value);
+            value = std::move(storage_[head_].value);
             storage_[head_].state.store(0, std::memory_order_release);
             head_ = head_ + 1 & storage_.mask();
-            return value;
+            return true;
         }
 
-        template < bool Blocking, size_t N > size_t pop(std::array< T, N >& values)
+        template < size_t N > size_t pop(std::array< T, N >& values)
         {
-            while (storage_[head_].state.load(std::memory_order_acquire) == 0)
+            if(storage_[head_].state.load(std::memory_order_acquire) == 0)
             {
-                if(!Blocking)
-                    return 0;
+                return 0;
             }
 
             size_t i = 0;
@@ -286,60 +286,49 @@ namespace queue
             , tail_local_(0)
         {}
 
-        template < typename Ty > void push(Ty&& value)
+        template < typename Ty > bool push(Ty&& value)
         {
             intptr_t tail = tail_.load(std::memory_order_relaxed);
             if (head_local_ + storage_.size() - tail < 1)
             {
-                while (true)
+                head_local_ = head_.load(std::memory_order_acquire);
+                if (head_local_ + storage_.size() - tail <= 1)
                 {
-                    head_local_ = head_.load(std::memory_order_acquire);
-                    if (head_local_ + storage_.size() - tail >= 1)
-                    {
-                        break;
-                    }
+                    return false;
                 }
             }
 
             storage_[tail & storage_.mask()] = std::forward< Ty >(value);
             tail_.store(tail + 1, std::memory_order_release);
+            return true;
         }
 
-        T pop()
+        bool pop(value_type& value)
         {
             intptr_t head = head_.load(std::memory_order_relaxed);
             if (tail_local_ - head < 1)
             {
-                while (true)
+                tail_local_ = tail_.load(std::memory_order_acquire);
+                if (tail_local_ - head <= 0)
                 {
-                    tail_local_ = tail_.load(std::memory_order_acquire);
-                    if (tail_local_ - head >= 1)
-                    {
-                        break;
-                    }
+                    return false;
                 }
             }
 
-            T value = std::move(storage_[head & storage_.mask()]);
+            value = std::move(storage_[head & storage_.mask()]);
             head_.store(head + 1, std::memory_order_release);
-            return value;
+            return true;
         }
 
-        template < bool Blocking, size_t N > size_t pop(std::array< T, N >& values)
+        template < size_t N > size_t pop(std::array< T, N >& values)
         {
             intptr_t head = head_.load(std::memory_order_relaxed);
             if (tail_local_ - head < 1)
             {
-                while (true)
+                tail_local_ = tail_.load(std::memory_order_acquire);
+                if (tail_local_ - head <= 0)
                 {
-                    tail_local_ = tail_.load(std::memory_order_acquire);
-                    if (tail_local_ - head >= 1)
-                    {
-                        break;
-                    }
-
-                    if(!Blocking)
-                        return 0;
+                    return 0;
                 }
             }
 
