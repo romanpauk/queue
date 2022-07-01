@@ -265,7 +265,7 @@ namespace queue
 
     private:
         alignas(CacheLineSize) size_t tail_;
-        alignas(CacheLineSize) size_t head_;        
+        alignas(CacheLineSize) size_t head_;
         alignas(CacheLineSize) storage_type storage_;
     };
 
@@ -292,12 +292,12 @@ namespace queue
             if (head_local_ + storage_.size() - tail < 1)
             {
                 head_local_ = head_.load(std::memory_order_acquire);
-                if (head_local_ + storage_.size() - tail <= 1)
+                if (head_local_ + storage_.size() - tail < 1)
                 {
                     return false;
                 }
             }
-
+            
             storage_[tail & storage_.mask()] = std::forward< Ty >(value);
             tail_.store(tail + 1, std::memory_order_release);
             return true;
@@ -309,7 +309,7 @@ namespace queue
             if (tail_local_ - head < 1)
             {
                 tail_local_ = tail_.load(std::memory_order_acquire);
-                if (tail_local_ - head <= 0)
+                if (tail_local_ - head < 1)
                 {
                     return false;
                 }
@@ -326,7 +326,7 @@ namespace queue
             if (tail_local_ - head < 1)
             {
                 tail_local_ = tail_.load(std::memory_order_acquire);
-                if (tail_local_ - head <= 0)
+                if (tail_local_ - head < 1)
                 {
                     return 0;
                 }
@@ -345,7 +345,7 @@ namespace queue
         bool empty() const
         {
             // TODO: could this use producer/consumer local variables?
-            return head_local_ == tail_local_;
+            return head_.load(std::memory_order_acquire) == tail_.load(std::memory_order_acquire);
         }
 
         void clear()
